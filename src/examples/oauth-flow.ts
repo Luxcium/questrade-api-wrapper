@@ -4,7 +4,7 @@
  */
 
 import express, { Request, Response } from 'express';
-import { QuestradeClient } from './client';
+import { QuestradeClient } from '../client';
 
 // Initialize Express for OAuth callback
 const app = express();

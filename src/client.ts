@@ -262,11 +262,6 @@ export class QuestradeClient extends EventEmitter {
       timestamp: Date.now(),
     };
 
-    // Check for HTTP errors
-    if (!response.ok) {
-      throw this.errorHandler.createError(httpResponse);
-    }
-
     // Extract and update rate limit headers
     if (httpResponse.headers['x-ratelimit-remaining']) {
       const category =
@@ -403,8 +398,8 @@ export class QuestradeClient extends EventEmitter {
    * ===== STREAMING OPERATIONS =====
    */
 
-  async connectStream(sessionId: string, type: 'level1' | 'level2' | 'trades' | 'notifications') {
-    return this.stream.createStream(sessionId, type);
+  async connectStream(sessionId: string, type: 'level1' | 'level2' | 'trades' | 'notifications'): Promise<void> {
+    await this.stream.createStream(sessionId, type);
   }
 
   subscribeToQuotes(sessionId: string, symbols: string[]) {

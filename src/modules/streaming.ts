@@ -39,8 +39,8 @@ interface StreamSession {
 
 export class StreamingEngine extends EventEmitter {
   private sessions: Map<string, StreamSession> = new Map();
-  private heartbeatIntervals: Map<string, NodeJS.Timer> = new Map();
-  private reconnectTimeouts: Map<string, NodeJS.Timer> = new Map();
+  private heartbeatIntervals: Map<string, ReturnType<typeof setInterval>> = new Map();
+  private reconnectTimeouts: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private messageSequence: number = 0;
   private logger: Logger;
   private accessTokenProvider: () => string;

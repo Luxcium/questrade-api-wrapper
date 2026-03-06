@@ -39,7 +39,7 @@ export class RateLimitingQueue extends EventEmitter {
   private accountQueue: QueuedRequest[] = [];
   private marketQueue: QueuedRequest[] = [];
   private rateLimitState: Map<EndpointCategory, RateLimitState> = new Map();
-  private processingInterval: NodeJS.Timer | null = null;
+  private processingInterval: ReturnType<typeof setInterval> | null = null;
   private metrics: QueueMetrics = {
     processedCount: 0,
     failedCount: 0,

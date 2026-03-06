@@ -4,9 +4,9 @@
  * Uses mock API server for testing without real Questrade account
  */
 
-import { QuestradeClient } from '../client';
-import { ErrorCode, EndpointCategory } from '../types';
-import { Logger } from '../modules/logger';
+import { QuestradeClient } from '../src/client';
+import { ErrorCode, EndpointCategory } from '../src/types';
+import { Logger } from '../src/modules/logger';
 
 describe('QuestradeClient', () => {
   let client: QuestradeClient;

@@ -150,7 +150,7 @@ export class Logger {
       level,
       message,
       context: {
-        ...this.context.get(this.getCurrentRequestId()),
+        ...(this.getCurrentRequestId() ? this.context.get(this.getCurrentRequestId()!) : {}),
         ...context,
       },
       requestId: this.getCurrentRequestId(),
