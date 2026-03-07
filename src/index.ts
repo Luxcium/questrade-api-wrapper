@@ -19,7 +19,6 @@ export type {
   
   // Errors
   APIErrorResponse,
-  QuestradeError,
   OrderRejectInfo,
   
   // Accounts
@@ -55,6 +54,9 @@ export type {
   RateLimitHeaders,
   RequestContext,
 } from './types';
+
+// QuestradeError is a class (value + type) so export as a value
+export { QuestradeError } from './types';
 
 // Enum exports
 export {

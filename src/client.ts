@@ -48,6 +48,8 @@ export class QuestradeClient extends EventEmitter {
   private stream: StreamingEngine;
   private logger: Logger;
   private requestIdCounter = 0;
+  private authConfig: { clientId: string; clientSecret?: string; redirectUri: string };
+  private requestTimeoutMs: number;
 
   constructor(
     authConfig: {
@@ -61,9 +63,14 @@ export class QuestradeClient extends EventEmitter {
       prettyPrint?: boolean;
       tokenStoragePath?: string;
       encryptionKey?: string;
+      requestTimeoutMs?: number;
     }
   ) {
     super();
+
+    // Store auth config for use in getAuthorizationUrl
+    this.authConfig = authConfig;
+    this.requestTimeoutMs = options?.requestTimeoutMs ?? 30000;
 
     // Initialize logger
     this.logger = new Logger(
@@ -153,9 +160,9 @@ export class QuestradeClient extends EventEmitter {
    */
   getAuthorizationUrl(scopes?: string[]): string {
     const params = new URLSearchParams({
-      client_id: process.env.QUESTRADE_CLIENT_ID || '',
+      client_id: this.authConfig.clientId,
       response_type: 'code',
-      redirect_uri: process.env.QUESTRADE_REDIRECT_URI || '',
+      redirect_uri: this.authConfig.redirectUri,
       ...(scopes && { scope: scopes.join(',') }),
     });
 
@@ -218,12 +225,16 @@ export class QuestradeClient extends EventEmitter {
     const apiServer = this.auth.getApiServer();
     const url = `${apiServer}${path}`;
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+
     const fetchOptions: any = {
       method,
       headers: {
         'Authorization': authHeader,
         'Content-Type': 'application/json',
       },
+      signal: controller.signal,
     };
 
     if (body && (method === 'POST' || method === 'PUT')) {
@@ -232,9 +243,15 @@ export class QuestradeClient extends EventEmitter {
 
     try {
       const response = await fetch(url, fetchOptions);
+      clearTimeout(timeoutId);
       return this.handleResponse<T>(response);
     } catch (error) {
-      this.errorHandler.handleNetworkError(error as Error, {
+      clearTimeout(timeoutId);
+      // Re-throw errors that are already typed QuestradeErrors (e.g. from handleResponse)
+      if (error instanceof QuestradeError) {
+        throw error;
+      }
+      return this.errorHandler.handleNetworkError(error as Error, {
         method,
         path,
         url,
@@ -276,7 +293,7 @@ export class QuestradeClient extends EventEmitter {
       );
     }
 
-    return this.errorHandler.parseResponse(httpResponse) as any;
+    return this.errorHandler.parseResponse(httpResponse).body;
   }
 
   /**

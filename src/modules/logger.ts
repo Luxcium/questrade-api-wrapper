@@ -35,6 +35,9 @@ export class Logger {
   private prettyPrint: boolean;
   private context: Map<string, any> = new Map();
   private requestIdStack: string[] = [];
+  private pendingWrites: string[] = [];
+  private streamInitFailed = false;
+  private static readonly MAX_PENDING_WRITES = 1000;
 
   constructor(
     level: 'trace' | 'debug' | 'info' | 'warn' | 'error' = 'info',
@@ -66,8 +69,17 @@ export class Logger {
       this.stream.on('error', error => {
         console.error('Logger stream error:', error);
       });
+
+      // Flush any writes that arrived before the stream was ready
+      for (const pending of this.pendingWrites) {
+        this.stream.write(pending);
+      }
+      this.pendingWrites = [];
     } catch (error) {
       console.error('Failed to initialize logger', error);
+      // Stop buffering to prevent unbounded memory growth
+      this.streamInitFailed = true;
+      this.pendingWrites = [];
     }
   }
 
@@ -183,7 +195,15 @@ export class Logger {
     console.log(output);
 
     if (this.stream) {
-      this.stream.write(output + '\n');
+      // Strip ANSI color codes before writing to file
+      const stripped = output.replace(/\x1b\[[0-9;]*m/g, '');
+      this.stream.write(stripped + '\n');
+    } else if (this.filePath && !this.streamInitFailed) {
+      // Buffer writes until the stream is ready, up to the cap
+      const stripped = output.replace(/\x1b\[[0-9;]*m/g, '');
+      if (this.pendingWrites.length < Logger.MAX_PENDING_WRITES) {
+        this.pendingWrites.push(stripped + '\n');
+      }
     }
   }
 
@@ -196,6 +216,10 @@ export class Logger {
 
     if (this.stream) {
       this.stream.write(json + '\n');
+    } else if (this.filePath && !this.streamInitFailed) {
+      if (this.pendingWrites.length < Logger.MAX_PENDING_WRITES) {
+        this.pendingWrites.push(json + '\n');
+      }
     }
   }
 

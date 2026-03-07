@@ -16,9 +16,9 @@ import {
   StreamMessage,
   StreamEventType,
   StreamSubscription,
-  QuestradeError,
   ErrorCode,
 } from '../types';
+import { QuestradeError } from '../types';
 import { Logger } from './logger';
 
 const HEARTBEAT_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
@@ -102,9 +102,26 @@ export class StreamingEngine extends EventEmitter {
       const accessToken = this.accessTokenProvider();
 
       // Construct WebSocket URL
-      const protocol = streamConfig.streamUri ? 'wss' : 'wss';
-      const host = streamConfig.streamUri || `127.0.0.1:${streamConfig.streamPort}`;
-      const wsUrl = `${protocol}://${host}`;
+      let wsUrl: string;
+      if (
+        streamConfig.streamUri &&
+        (streamConfig.streamUri.startsWith('ws://') ||
+          streamConfig.streamUri.startsWith('wss://'))
+      ) {
+        // Use full URL directly when a WebSocket scheme is already provided
+        wsUrl = streamConfig.streamUri;
+      } else {
+        const host =
+          streamConfig.streamUri || `127.0.0.1:${streamConfig.streamPort}`;
+        wsUrl = `wss://${host}`;
+      }
+
+      // Remove listeners from old WebSocket if reconnecting
+      if (session.ws) {
+        session.ws.removeAllListeners();
+        session.ws.terminate();
+        session.ws = null;
+      }
 
       this.logger.debug('Connecting stream', { sessionId, wsUrl });
 
@@ -453,10 +470,6 @@ export class StreamingEngine extends EventEmitter {
     message: string,
     statusCode: number
   ): QuestradeError {
-    const error = new Error(message) as QuestradeError;
-    error.code = code;
-    error.statusCode = statusCode;
-    error.isRetryable = true;
-    return error;
+    return new QuestradeError(message, code, statusCode, true);
   }
 }

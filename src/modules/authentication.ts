@@ -11,7 +11,9 @@ import fs from 'fs/promises';
 import path from 'path';
 import { EventEmitter } from 'events';
 import crypto from 'crypto';
-import { TokenPayload, OAuthTokenResponse, AuthConfig, QuestradeError, ErrorCode } from '../types';
+import fetch from 'node-fetch';
+import { TokenPayload, OAuthTokenResponse, AuthConfig, ErrorCode } from '../types';
+import { QuestradeError } from '../types';
 import { Logger } from './logger';
 
 const TOKEN_BUFFER_SECONDS = 30; // Refresh token 30s before expiry
@@ -25,7 +27,6 @@ export class AuthenticationManager extends EventEmitter {
   private encryptionKey?: Buffer;
   private logger: Logger;
   private lastRefreshTime: number = 0;
-  private refreshBackoffMs: number = 1000;
 
   constructor(
     config: AuthConfig,
@@ -288,7 +289,6 @@ export class AuthenticationManager extends EventEmitter {
       apiServer: oauthResponse.api_server,
       expiresAt: now + oauthResponse.expires_in * 1000,
       refreshTokenExpiresAt: now + REFRESH_TOKEN_EXPIRY_MS,
-      scope: oauthResponse.token_type ? undefined : undefined, // Parse if present
     };
   }
 
@@ -392,10 +392,12 @@ export class AuthenticationManager extends EventEmitter {
     message: string,
     statusCode: number
   ): QuestradeError {
-    const error = new Error(message) as QuestradeError;
-    error.code = code;
-    error.statusCode = statusCode;
-    error.isRetryable = statusCode >= 500 || statusCode === 429;
+    const error = new QuestradeError(
+      message,
+      code,
+      statusCode,
+      statusCode >= 500 || statusCode === 429
+    );
     return error;
   }
 }
