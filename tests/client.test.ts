@@ -6,6 +6,7 @@
 
 import { QuestradeClient } from '../src/client';
 import { ErrorCode, EndpointCategory, OrderSide, OrderType } from '../src/types';
+ 
 import { Logger } from '../src/modules/logger';
 
 // ---------------------------------------------------------------------------
@@ -270,6 +271,7 @@ describe('QuestradeClient', () => {
         quantity: 10,
         side: OrderSide.BUY,
         type: OrderType.LIMIT,
+
         price: 150,
       });
 
