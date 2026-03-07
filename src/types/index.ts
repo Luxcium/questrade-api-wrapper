@@ -109,15 +109,29 @@ export interface OrderRejectInfo {
   timestamp: number;
 }
 
-export interface QuestradeError extends Error {
+export class QuestradeError extends Error {
   code: ErrorCode;
   statusCode: number;
-  message: string;
   originalError?: Error;
   context?: Record<string, any>;
   isRetryable: boolean;
   orderId?: string;
   rejectedOrders?: OrderRejectInfo[];
+
+  constructor(
+    message: string,
+    code: ErrorCode,
+    statusCode: number,
+    isRetryable: boolean
+  ) {
+    super(message);
+    this.name = 'QuestradeError';
+    this.code = code;
+    this.statusCode = statusCode;
+    this.isRetryable = isRetryable;
+    // Maintain proper prototype chain for instanceof checks
+    Object.setPrototypeOf(this, QuestradeError.prototype);
+  }
 }
 
 // ========== ACCOUNT TYPES ==========
@@ -172,7 +186,7 @@ export enum OrderType {
 export enum OrderSide {
   BUY = 'Buy',
   SELL = 'Sell',
-  SHORT = 'Sell',
+  SHORT = 'Short',
 }
 
 export enum OrderStatus {

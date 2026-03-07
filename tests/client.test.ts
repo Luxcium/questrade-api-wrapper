@@ -1,18 +1,178 @@
 /**
  * Integration Tests
  * Tests all modules working together with the QuestradeClient
- * Uses mock API server for testing without real Questrade account
+ * Uses jest.mock to intercept fetch calls — no real network access.
  */
 
 import { QuestradeClient } from '../src/client';
-import { ErrorCode, EndpointCategory } from '../src/types';
+import { ErrorCode, EndpointCategory, OrderSide, OrderType } from '../src/types';
 import { Logger } from '../src/modules/logger';
+
+// ---------------------------------------------------------------------------
+// Mock node-fetch so no real HTTP requests are made
+// ---------------------------------------------------------------------------
+jest.mock('node-fetch', () => {
+  const mockFetch = jest.fn();
+  return mockFetch;
+});
+
+import fetch, { RequestInfo, RequestInit } from 'node-fetch';
+
+const mockFetch = fetch as jest.MockedFunction<typeof fetch>;
+
+// Helper: create a mock Response with the given status and body
+function mockResponse(body: unknown, status = 200): any {
+  const text = JSON.stringify(body);
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: status === 200 ? 'OK' : 'Error',
+    headers: {
+      entries: () => [],
+      get: () => null,
+    },
+    text: async () => text,
+    json: async () => body,
+  };
+}
+
+// Shared mock token response (used for OAuth exchange & refresh)
+const MOCK_TOKEN_RESPONSE = {
+  access_token: 'mock_access_token_12345',
+  token_type: 'Bearer' as const,
+  expires_in: 1800,
+  refresh_token: 'mock_refresh_token_12345',
+  api_server: 'http://localhost:4000/',
+};
+
+// Default API mock responses keyed by a simple URL substring
+function defaultMockImpl(url: RequestInfo, _options?: RequestInit): any {
+  const urlStr = url.toString();
+  // OAuth token exchange / refresh
+  if (urlStr.includes('login.questrade.com')) {
+    return mockResponse(MOCK_TOKEN_RESPONSE);
+  }
+
+  // Account list
+  if (urlStr.endsWith('/accounts')) {
+    return mockResponse({
+      accounts: [
+        {
+          number: '12345',
+          type: 'Margin',
+          status: 'Active',
+          isFunded: true,
+          isChart: false,
+          canPlaceTrades: true,
+          accountId: 12345,
+        },
+      ],
+    });
+  }
+
+  // Account balance
+  if (urlStr.includes('/balances')) {
+    return mockResponse({
+      cash: 10000,
+      marketValue: 5000,
+      totalEquity: 15000,
+      buyingPower: 20000,
+      maintenanceExcess: 8000,
+      isDayTrader: false,
+      maxBuyingPower: 20000,
+      currency: 'CAD',
+      accountType: 'Margin',
+    });
+  }
+
+  // Positions
+  if (urlStr.includes('/positions')) {
+    return mockResponse({
+      positions: [
+        {
+          symbol: 'AAPL',
+          symbolId: 8049,
+          openQuantity: 10,
+          closedQuantity: 0,
+          currentMarketValue: 1750,
+          currentPrice: 175,
+          averageEntryPrice: 160,
+          closedPnl: 0,
+          openPnl: 150,
+          totalPnl: 150,
+          isRealTime: true,
+          isUnderReorg: false,
+        },
+      ],
+    });
+  }
+
+  // Orders list
+  if (urlStr.includes('/orders') && !urlStr.includes('DELETE')) {
+    return mockResponse({ orders: [] });
+  }
+
+  // Markets
+  if (urlStr.endsWith('/markets')) {
+    return mockResponse({
+      markets: [
+        {
+          id: 'TSX',
+          name: 'Toronto Stock Exchange',
+          status: 'Open',
+          openTime: '09:30',
+          closeTime: '16:00',
+          timezone: 'America/Toronto',
+        },
+      ],
+    });
+  }
+
+  // Quote
+  if (urlStr.includes('/markets/quotes/')) {
+    return mockResponse({
+      symbol: 'AAPL',
+      symbolId: 8049,
+      bid: 174.5,
+      ask: 175.0,
+      last: 174.75,
+      lastTradeTime: Date.now(),
+      volume: 1000000,
+      isRealTime: true,
+    });
+  }
+
+  // Symbol search
+  if (urlStr.includes('/symbols/search')) {
+    return mockResponse({
+      symbols: [
+        {
+          symbol: 'AAPL',
+          symbolId: 8049,
+          name: 'Apple Inc.',
+          currency: 'USD',
+          optionsEnabled: true,
+          minTradeQuantity: 1,
+        },
+      ],
+      total: 1,
+      limit: 5,
+      offset: 0,
+    });
+  }
+
+  // Default: empty success
+  return mockResponse({});
+}
 
 describe('QuestradeClient', () => {
   let client: QuestradeClient;
   let logger: Logger;
 
   beforeEach(() => {
+    jest.clearAllMocks();
+    mockFetch.mockImplementation(defaultMockImpl);
+
     logger = new Logger('trace');
     client = new QuestradeClient(
       {
@@ -22,7 +182,7 @@ describe('QuestradeClient', () => {
       },
       {
         logLevel: 'debug',
-        tokenStoragePath: '.keys/test-tokens.json',
+        tokenStoragePath: '/tmp/test-tokens.json',
       }
     );
   });
@@ -33,9 +193,7 @@ describe('QuestradeClient', () => {
 
   describe('Authentication', () => {
     it('should initialize with auth code', async () => {
-      const authCode = 'mock_auth_code';
-      // Mock the OAuth exchange
-      await client.initialize(authCode);
+      await client.initialize('mock_auth_code');
 
       const tokenInfo = client.getTokenInfo();
       expect(tokenInfo).toBeDefined();
@@ -43,8 +201,7 @@ describe('QuestradeClient', () => {
     });
 
     it('should handle token refresh', async () => {
-      const authCode = 'mock_auth_code';
-      await client.initialize(authCode);
+      await client.initialize('mock_auth_code');
 
       const initialToken = client.getTokenInfo();
       expect(initialToken?.expiresIn).toBeGreaterThan(0);
@@ -92,12 +249,21 @@ describe('QuestradeClient', () => {
     });
 
     it('should place order with high priority', async () => {
+      // Mock POST /orders response
+      mockFetch.mockImplementation((url: RequestInfo, options?: RequestInit) => {
+        const urlStr = url.toString();
+        if (urlStr.includes('/orders') && options?.method === 'POST') {
+          return mockResponse({ orderId: 'order-abc-123' });
+        }
+        return defaultMockImpl(url, options);
+      });
+
       const accounts = await client.getAccounts();
       const result = await client.placeOrder(accounts[0].accountId, {
         symbol: 'AAPL',
         quantity: 10,
-        side: 'Buy' as const,
-        type: 'Limit' as const,
+        side: OrderSide.BUY,
+        type: OrderType.LIMIT,
         price: 150,
       });
 
@@ -139,7 +305,6 @@ describe('QuestradeClient', () => {
     });
 
     it('should track rate limit state', async () => {
-      // Make a few requests
       await client.getAccounts();
       await client.searchSymbols('AAPL');
 
@@ -164,18 +329,26 @@ describe('QuestradeClient', () => {
     });
 
     it('should handle 401 Unauthorized gracefully', async () => {
-      // This would require mock server to return 401
-      // Testing error structure
+      mockFetch.mockImplementation((url: RequestInfo) => {
+        const urlStr = url.toString();
+        if (urlStr.includes('/accounts')) {
+          return mockResponse({ message: 'Unauthorized' }, 401);
+        }
+        return defaultMockImpl(url);
+      });
+
       try {
-        // Trigger an error
         await (client as any).request(
           EndpointCategory.ACCOUNT,
           'GET',
-          '/invalid-endpoint'
+          '/accounts'
         );
-      } catch (error) {
+        fail('Expected an error to be thrown');
+      } catch (error: any) {
         expect(error).toHaveProperty('code');
+        expect(error.code).toBe(ErrorCode.UNAUTHORIZED);
         expect(error).toHaveProperty('statusCode');
+        expect(error.statusCode).toBe(401);
         expect(error).toHaveProperty('isRetryable');
       }
     });
@@ -203,8 +376,6 @@ describe('QuestradeClient', () => {
     it('should emit token-refreshed event on refresh', (done) => {
       client.on('token-refreshed', eventListener);
 
-      // Would need to test actual refresh
-      // For now just verify listener works
       client.emit('token-refreshed', { expiresIn: 300 });
 
       setTimeout(() => {
@@ -222,9 +393,7 @@ describe('QuestradeClient', () => {
     it('should provide token info', () => {
       const info = client.getTokenInfo();
       expect(info).toBeDefined();
-      expect(info?.apiServer).toBe(
-        process.env.QUESTRADE_API_SERVER || 'https://api01.iq.questrade.com'
-      );
+      expect(info?.apiServer).toBe('http://localhost:4000/');
     });
 
     it('should provide complete health metrics', async () => {
@@ -242,4 +411,38 @@ describe('QuestradeClient', () => {
       expect(queueStats.avgProcessingTime).toBeGreaterThanOrEqual(0);
     });
   });
+
+  describe('getAuthorizationUrl', () => {
+    it('should use constructor config not process.env', () => {
+      const url = client.getAuthorizationUrl(['read', 'write']);
+      expect(url).toContain('client_id=mock_client_id');
+      expect(url).toContain('redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fcallback');
+      expect(url).toContain('scope=read%2Cwrite');
+    });
+  });
+
+  describe('QuestradeError', () => {
+    it('should be instanceof QuestradeError after being thrown', async () => {
+      const { QuestradeError: QError } = await import('../src/types');
+
+      mockFetch.mockImplementation((url: RequestInfo) => {
+        const urlStr = url.toString();
+        if (urlStr.includes('/accounts')) {
+          return mockResponse({ message: 'Not found' }, 404);
+        }
+        return defaultMockImpl(url);
+      });
+
+      await client.initialize('mock_auth_code');
+
+      try {
+        await (client as any).request(EndpointCategory.ACCOUNT, 'GET', '/accounts');
+        fail('Expected error');
+      } catch (error) {
+        expect(error).toBeInstanceOf(QError);
+        expect(error).toBeInstanceOf(Error);
+      }
+    });
+  });
 });
+

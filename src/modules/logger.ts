@@ -35,6 +35,7 @@ export class Logger {
   private prettyPrint: boolean;
   private context: Map<string, any> = new Map();
   private requestIdStack: string[] = [];
+  private pendingWrites: string[] = [];
 
   constructor(
     level: 'trace' | 'debug' | 'info' | 'warn' | 'error' = 'info',
@@ -66,6 +67,12 @@ export class Logger {
       this.stream.on('error', error => {
         console.error('Logger stream error:', error);
       });
+
+      // Flush any writes that arrived before the stream was ready
+      for (const pending of this.pendingWrites) {
+        this.stream.write(pending);
+      }
+      this.pendingWrites = [];
     } catch (error) {
       console.error('Failed to initialize logger', error);
     }
@@ -183,7 +190,13 @@ export class Logger {
     console.log(output);
 
     if (this.stream) {
-      this.stream.write(output + '\n');
+      // Strip ANSI color codes before writing to file
+      const stripped = output.replace(/\x1b\[[0-9;]*m/g, '');
+      this.stream.write(stripped + '\n');
+    } else if (this.filePath) {
+      // Buffer writes until the stream is ready
+      const stripped = output.replace(/\x1b\[[0-9;]*m/g, '');
+      this.pendingWrites.push(stripped + '\n');
     }
   }
 
@@ -196,6 +209,8 @@ export class Logger {
 
     if (this.stream) {
       this.stream.write(json + '\n');
+    } else if (this.filePath) {
+      this.pendingWrites.push(json + '\n');
     }
   }
 

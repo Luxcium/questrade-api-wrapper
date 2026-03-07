@@ -115,12 +115,12 @@ export class ErrorInterceptor extends EventEmitter {
         message = apiErrorResponse.message || `HTTP ${statusCode}`;
     }
 
-    const error = new Error(message) as QuestradeError;
-    error.code = errorCode;
-    error.statusCode = statusCode;
-    error.message = message;
-    error.isRetryable =
-      statusCode >= 500 || statusCode === 429 || statusCode === 408;
+    const error = new QuestradeError(
+      message,
+      errorCode,
+      statusCode,
+      statusCode >= 500 || statusCode === 429 || statusCode === 408
+    );
     error.orderId = orderId;
     error.rejectedOrders = rejectedOrders;
     error.context = {
@@ -144,7 +144,7 @@ export class ErrorInterceptor extends EventEmitter {
       context: error.context,
     });
 
-    this.emit('error', error);
+    this.emit('api-error', error);
 
     return error;
   }
@@ -173,12 +173,13 @@ export class ErrorInterceptor extends EventEmitter {
       message = error.message || 'Network error';
     }
 
-    const questradeError = new Error(message) as QuestradeError;
-    questradeError.code = errorCode;
-    questradeError.statusCode = 0;
-    questradeError.message = message;
+    const questradeError = new QuestradeError(
+      message,
+      errorCode,
+      0,
+      true
+    );
     questradeError.originalError = error;
-    questradeError.isRetryable = true;
     questradeError.context = { ...context, originalError: error.message };
 
     this.logger.error('Network error', {
@@ -202,12 +203,12 @@ export class ErrorInterceptor extends EventEmitter {
     statusCode: number,
     context?: Record<string, any>
   ): QuestradeError {
-    const error = new Error(message) as QuestradeError;
-    error.code = code;
-    error.statusCode = statusCode;
-    error.message = message;
-    error.isRetryable =
-      statusCode >= 500 || statusCode === 429 || code === ErrorCode.NETWORK_ERROR;
+    const error = new QuestradeError(
+      message,
+      code,
+      statusCode,
+      statusCode >= 500 || statusCode === 429 || code === ErrorCode.NETWORK_ERROR
+    );
     error.context = context;
 
     return error;

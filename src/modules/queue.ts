@@ -15,14 +15,13 @@ import {
   EndpointCategory,
   RateLimitState,
   QueueStats,
-  QuestradeError,
   ErrorCode,
 } from '../types';
 import { Logger } from './logger';
 
 const RPS_LIMITS = {
-  [EndpointCategory.ACCOUNT]: 30,
-  [EndpointCategory.MARKET_DATA]: 20,
+  [EndpointCategory.ACCOUNT]: parseInt(process.env.RATE_LIMIT_ACCOUNT_RPS || '30', 10),
+  [EndpointCategory.MARKET_DATA]: parseInt(process.env.RATE_LIMIT_MARKET_RPS || '20', 10),
 };
 
 const BATCH_INTERVAL_MS = 100; // Process queue every 100ms
@@ -235,6 +234,7 @@ export class RateLimitingQueue extends EventEmitter {
       }
 
       const result = await handler(request);
+      this.requestHandlers.delete(request.id);
 
       const duration = Date.now() - startTime;
       this.metrics.processedCount++;
