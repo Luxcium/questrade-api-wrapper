@@ -49,6 +49,7 @@ export class QuestradeClient extends EventEmitter {
   private logger: Logger;
   private requestIdCounter = 0;
   private authConfig: { clientId: string; clientSecret?: string; redirectUri: string };
+  private requestTimeoutMs: number;
 
   constructor(
     authConfig: {
@@ -62,12 +63,14 @@ export class QuestradeClient extends EventEmitter {
       prettyPrint?: boolean;
       tokenStoragePath?: string;
       encryptionKey?: string;
+      requestTimeoutMs?: number;
     }
   ) {
     super();
 
     // Store auth config for use in getAuthorizationUrl
     this.authConfig = authConfig;
+    this.requestTimeoutMs = options?.requestTimeoutMs ?? 30000;
 
     // Initialize logger
     this.logger = new Logger(
@@ -223,8 +226,7 @@ export class QuestradeClient extends EventEmitter {
     const url = `${apiServer}${path}`;
 
     const controller = new AbortController();
-    const timeoutMs = 30000;
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const timeoutId = setTimeout(() => controller.abort(), this.requestTimeoutMs);
 
     const fetchOptions: any = {
       method,

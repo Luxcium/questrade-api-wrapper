@@ -49,8 +49,13 @@ const MOCK_TOKEN_RESPONSE = {
 function defaultMockImpl(url: RequestInfo, _options?: RequestInit): any {
   const urlStr = url.toString();
   // OAuth token exchange / refresh
-  if (urlStr.includes('login.questrade.com')) {
-    return mockResponse(MOCK_TOKEN_RESPONSE);
+  try {
+    const parsedUrl = new URL(urlStr);
+    if (parsedUrl.hostname === 'login.questrade.com') {
+      return mockResponse(MOCK_TOKEN_RESPONSE);
+    }
+  } catch {
+    // Not a valid URL, fall through
   }
 
   // Account list
@@ -183,6 +188,7 @@ describe('QuestradeClient', () => {
       {
         logLevel: 'debug',
         tokenStoragePath: '/tmp/test-tokens.json',
+        requestTimeoutMs: 5000,
       }
     );
   });
