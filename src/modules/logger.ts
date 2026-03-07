@@ -36,6 +36,8 @@ export class Logger {
   private context: Map<string, any> = new Map();
   private requestIdStack: string[] = [];
   private pendingWrites: string[] = [];
+  private streamInitFailed = false;
+  private static readonly MAX_PENDING_WRITES = 1000;
 
   constructor(
     level: 'trace' | 'debug' | 'info' | 'warn' | 'error' = 'info',
@@ -75,6 +77,9 @@ export class Logger {
       this.pendingWrites = [];
     } catch (error) {
       console.error('Failed to initialize logger', error);
+      // Stop buffering to prevent unbounded memory growth
+      this.streamInitFailed = true;
+      this.pendingWrites = [];
     }
   }
 
@@ -193,10 +198,12 @@ export class Logger {
       // Strip ANSI color codes before writing to file
       const stripped = output.replace(/\x1b\[[0-9;]*m/g, '');
       this.stream.write(stripped + '\n');
-    } else if (this.filePath) {
-      // Buffer writes until the stream is ready
+    } else if (this.filePath && !this.streamInitFailed) {
+      // Buffer writes until the stream is ready, up to the cap
       const stripped = output.replace(/\x1b\[[0-9;]*m/g, '');
-      this.pendingWrites.push(stripped + '\n');
+      if (this.pendingWrites.length < Logger.MAX_PENDING_WRITES) {
+        this.pendingWrites.push(stripped + '\n');
+      }
     }
   }
 
@@ -209,8 +216,10 @@ export class Logger {
 
     if (this.stream) {
       this.stream.write(json + '\n');
-    } else if (this.filePath) {
-      this.pendingWrites.push(json + '\n');
+    } else if (this.filePath && !this.streamInitFailed) {
+      if (this.pendingWrites.length < Logger.MAX_PENDING_WRITES) {
+        this.pendingWrites.push(json + '\n');
+      }
     }
   }
 

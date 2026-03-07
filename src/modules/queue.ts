@@ -19,9 +19,15 @@ import {
 } from '../types';
 import { Logger } from './logger';
 
+function parseRpsEnvVar(envValue: string | undefined, defaultValue: number): number {
+  if (!envValue) return defaultValue;
+  const parsed = parseInt(envValue, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : defaultValue;
+}
+
 const RPS_LIMITS = {
-  [EndpointCategory.ACCOUNT]: parseInt(process.env.RATE_LIMIT_ACCOUNT_RPS || '30', 10),
-  [EndpointCategory.MARKET_DATA]: parseInt(process.env.RATE_LIMIT_MARKET_RPS || '20', 10),
+  [EndpointCategory.ACCOUNT]: parseRpsEnvVar(process.env.RATE_LIMIT_ACCOUNT_RPS, 30),
+  [EndpointCategory.MARKET_DATA]: parseRpsEnvVar(process.env.RATE_LIMIT_MARKET_RPS, 20),
 };
 
 const BATCH_INTERVAL_MS = 100; // Process queue every 100ms

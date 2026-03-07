@@ -4,6 +4,8 @@
  * Uses jest.mock to intercept fetch calls — no real network access.
  */
 
+import os from 'os';
+import path from 'path';
 import { QuestradeClient } from '../src/client';
 import { ErrorCode, EndpointCategory, OrderSide, OrderType } from '../src/types';
  
@@ -113,8 +115,8 @@ function defaultMockImpl(url: RequestInfo, _options?: RequestInit): any {
     });
   }
 
-  // Orders list
-  if (urlStr.includes('/orders') && !urlStr.includes('DELETE')) {
+  // Orders list (GET only — DELETE is handled elsewhere)
+  if (urlStr.includes('/orders') && _options?.method !== 'DELETE') {
     return mockResponse({ orders: [] });
   }
 
@@ -188,7 +190,7 @@ describe('QuestradeClient', () => {
       },
       {
         logLevel: 'debug',
-        tokenStoragePath: '/tmp/test-tokens.json',
+        tokenStoragePath: path.join(os.tmpdir(), `test-tokens-${Date.now()}-${Math.random().toString(36).slice(2)}.json`),
         requestTimeoutMs: 5000,
       }
     );

@@ -2,7 +2,7 @@
 
 ## Overview
 
-`QuestradeClient` is the public entry point. It coordinates four core modules through an event-driven design. All modules extend `EventEmitter` and communicate via events rather than direct calls.
+`QuestradeClient` is the public entry point. It coordinates four core modules. Each module extends `EventEmitter`: events are used for observability and external integrations, while `QuestradeClient` primarily orchestrates them via direct method calls.
 
 ```
 QuestradeClient (EventEmitter)

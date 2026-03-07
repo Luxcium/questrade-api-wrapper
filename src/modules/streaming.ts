@@ -102,11 +102,19 @@ export class StreamingEngine extends EventEmitter {
       const accessToken = this.accessTokenProvider();
 
       // Construct WebSocket URL
-      const protocol = streamConfig.streamUri
-        ? (streamConfig.streamUri.startsWith('ws://') ? 'ws' : 'wss')
-        : 'wss';
-      const host = streamConfig.streamUri || `127.0.0.1:${streamConfig.streamPort}`;
-      const wsUrl = `${protocol}://${host}`;
+      let wsUrl: string;
+      if (
+        streamConfig.streamUri &&
+        (streamConfig.streamUri.startsWith('ws://') ||
+          streamConfig.streamUri.startsWith('wss://'))
+      ) {
+        // Use full URL directly when a WebSocket scheme is already provided
+        wsUrl = streamConfig.streamUri;
+      } else {
+        const host =
+          streamConfig.streamUri || `127.0.0.1:${streamConfig.streamPort}`;
+        wsUrl = `wss://${host}`;
+      }
 
       // Remove listeners from old WebSocket if reconnecting
       if (session.ws) {
