@@ -5,7 +5,7 @@
  */
 
 import { QuestradeClient } from '../src/client';
-import { ErrorCode, EndpointCategory } from '../src/types';
+import { ErrorCode, EndpointCategory, OrderRequest, OrderSide, OrderType } from '../src/types';
 import { Logger } from '../src/modules/logger';
 
 describe('QuestradeClient', () => {
@@ -96,8 +96,8 @@ describe('QuestradeClient', () => {
       const result = await client.placeOrder(accounts[0].accountId, {
         symbol: 'AAPL',
         quantity: 10,
-        side: 'Buy' as const,
-        type: 'Limit' as const,
+        side: 'Buy' as OrderSide,
+        type: 'Limit' as OrderType,
         price: 150,
       });
 
